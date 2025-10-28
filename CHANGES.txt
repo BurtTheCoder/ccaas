@@ -1,0 +1,148 @@
+TOOL ACCESS CONTROL IMPLEMENTATION - FILE CHANGES
+=================================================
+
+CREATED FILES (9):
+=================
+
+1. server/toolValidator.ts (520 lines)
+   - Core validation module
+   - Tool registry with 21 tools
+   - Risk assessment (LOW/MEDIUM/HIGH)
+   - Wildcard pattern matching
+   - Dangerous command blocking
+
+2. server/toolValidator.test.ts (400+ lines)
+   - Comprehensive unit tests
+   - Security tests
+   - Edge cases
+   - All test scenarios
+
+3. TOOL_ACCESS_CONTROL.md
+   - Complete documentation
+   - Architecture overview
+   - Usage examples
+   - Security considerations
+   - Testing procedures
+
+4. IMPLEMENTATION_SUMMARY.md
+   - High-level summary
+   - Status and metrics
+   - All changes documented
+   - Next steps
+
+5. TOOL_ACCESS_QUICK_REFERENCE.md
+   - Quick reference guide
+   - Common patterns
+   - Error messages
+   - Best practices
+
+6. examples/workflow-safe-tools.yaml
+   - Safe tools example (LOW risk)
+   - Read-only operations
+
+7. examples/workflow-medium-risk-tools.yaml
+   - Medium risk example
+   - Write operations
+
+8. examples/workflow-high-risk-tools.yaml
+   - High risk example
+   - Command execution with restrictions
+
+9. examples/workflow-wildcard-patterns.yaml
+   - Wildcard pattern examples
+   - Multi-language builds
+
+10. examples/workflow-invalid-tools.yaml
+    - Invalid config example (should fail)
+    - Test validation errors
+
+MODIFIED FILES (7):
+==================
+
+1. drizzle/schema.ts
+   - Added toolAccessAudit table
+   - Export audit types
+
+2. server/configService.ts
+   - Added tool validation to agentSchema
+   - Zod refinement for tools array
+
+3. server/docker.ts
+   - Added tools to ContainerConfig interface
+   - Validate tools before execution
+   - Pass --allow-tools to Claude CLI
+   - Return tool validation in result
+
+4. server/workflowUtils.ts
+   - Pass tools through in convertToContainerConfig
+
+5. server/workflowService.ts
+   - Import ToolValidator
+   - Validate tools before execution
+   - Log tool validation results
+   - Warn about high-risk tools
+   - Create audit log after execution
+
+6. server/db.ts
+   - Import toolAccessAudit types
+   - Added createToolAccessAudit()
+   - Added getToolAccessAuditByWorkflow()
+   - Added getToolAccessAuditByAgent()
+   - Added getToolAccessAuditByUser()
+   - Added getDeniedToolAccessAttempts()
+   - Added getHighRiskToolUsage()
+
+TESTING:
+========
+
+✅ pnpm check - No type errors
+✅ All validation logic tested
+✅ Security boundaries verified
+✅ Example workflows created
+
+ACCEPTANCE CRITERIA:
+===================
+
+✅ Tools validated against whitelist
+✅ Wildcard patterns supported (bash:npm:*)
+✅ Invalid tools rejected with clear errors
+✅ Tools passed to Claude Code CLI
+✅ Tool usage logged for audit trail
+✅ Risk levels assessed and warnings issued
+✅ Configuration validates tool names
+✅ Workflow fails if invalid tools requested
+✅ No type errors
+✅ pnpm check passes
+
+DEPLOYMENT:
+===========
+
+1. Run database migration:
+   pnpm db:push
+
+2. All code changes are ready to deploy
+
+3. No breaking changes to existing workflows
+   - Workflows without tools use safe defaults
+   - Existing tools continue to work if valid
+
+SECURITY FEATURES:
+=================
+
+- Defense in depth (4 layers of validation)
+- Fail-safe defaults
+- Dangerous commands blocked
+- Complete audit trail
+- Clear error messages
+- Risk classification
+
+MONITORING:
+===========
+
+Database queries available for:
+- Denied access attempts
+- High-risk tool usage
+- User activity reports
+- Tool usage analytics
+
+STATUS: ✅ COMPLETE AND PRODUCTION-READY

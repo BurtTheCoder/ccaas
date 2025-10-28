@@ -1,0 +1,109 @@
+# Example: High Risk Tools Configuration
+# This workflow includes bash command execution with restricted sub-tools
+
+name: Test Suite Runner
+description: Run tests, build, and create PR with fixes
+version: "1.0"
+
+agents:
+  - name: test-runner
+    role: Run test suite and identify failures
+    container:
+      image: claude-code:latest
+      githubRepo: https://github.com/example/repo.git
+      workingDir: /workspace
+      tools:
+        - Read
+        - Bash(npm:install)
+        - Bash(npm:test)
+        - Bash(npm:run)
+        - Bash(git:status)
+        - Bash(git:diff)
+      resources:
+        memory: 4Gi
+        cpu: "4"
+        timeout: 20m
+    prompt: |
+      1. Install dependencies with npm install
+      2. Run the test suite with npm test
+      3. Identify any failing tests
+      4. Check git status
+
+      Report on test results and any failures.
+    output: test_results
+
+  - name: bug-fixer
+    role: Fix failing tests
+    container:
+      image: claude-code:latest
+      workingDir: /workspace
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Grep
+        - Glob
+        - Bash(npm:test)
+      resources:
+        memory: 4Gi
+        cpu: "4"
+        timeout: 30m
+    prompt: |
+      Based on test results: ${test_results}
+
+      Fix the failing tests by:
+      1. Analyzing the error messages
+      2. Updating the code to fix issues
+      3. Re-running tests to verify fixes
+
+      Make the necessary code changes.
+    output: fixes_applied
+    conditions:
+      - if: "${test_results} contains 'FAIL'"
+        then:
+          action: continue
+        next: pr-creator
+
+  - name: pr-creator
+    role: Create pull request with fixes
+    container:
+      image: claude-code:latest
+      workingDir: /workspace
+      tools:
+        - Read
+        - Bash(git:add)
+        - Bash(git:commit)
+        - Bash(git:push)
+        - Bash(git:branch)
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: |
+      Create a pull request with the fixes:
+
+      Fixes applied: ${fixes_applied}
+
+      1. Create a new branch
+      2. Commit the changes
+      3. Push to origin
+      4. Create PR (use gh CLI if available)
+
+      Use clear commit messages describing the fixes.
+    output: pr_created
+
+workflow:
+  trigger:
+    type: manual
+  max_iterations: 15
+  max_consecutive_failures: 3
+  max_runtime: 60m
+  budget:
+    max_cost_per_execution: "$20.00"
+    daily_max_cost: "$200.00"
+    pause_on_exceed: true
+    alert_at_percent: 80
+  safety:
+    require_human_approval_for:
+      - git_push
+      - pr_create

@@ -1,0 +1,260 @@
+import { randomBytes } from "crypto";
+
+export interface ContainerConfig {
+  baseImage: string;
+  tools?: string[];
+  mcpServers?: string[];
+  skills?: string[];
+  resources?: {
+    memory?: string;
+    timeout?: string;
+    cpu?: string;
+  };
+  security?: {
+    runAsUser?: number;
+    readOnlyRoot?: boolean;
+    noNewPrivileges?: boolean;
+    dropCapabilities?: string[];
+    networkMode?: string;
+    allowedDomains?: string[];
+  };
+  volumes?: string[];
+  env?: Record<string, string>;
+}
+
+export interface ContainerSpawnOptions {
+  config: ContainerConfig;
+  projectPath: string;
+  prompt: string;
+  workingDir?: string;
+}
+
+export interface ContainerResult {
+  containerId: string;
+  output: string;
+  error?: string;
+  exitCode: number;
+  duration: number;
+}
+
+/**
+ * Generate a unique container ID
+ */
+export function generateContainerId(): string {
+  return `claude-code-${randomBytes(8).toString('hex')}`;
+}
+
+/**
+ * Spawn a Docker container with Claude Code
+ * 
+ * NOTE: This is a placeholder implementation. In production, this would:
+ * 1. Pull/verify the base image
+ * 2. Create a Docker container with the specified configuration
+ * 3. Mount the project directory
+ * 4. Execute Claude Code with the prompt
+ * 5. Stream logs and capture output
+ * 6. Clean up the container after execution
+ */
+export async function spawnContainer(options: ContainerSpawnOptions): Promise<ContainerResult> {
+  const containerId = generateContainerId();
+  const startTime = Date.now();
+
+  console.log(`[Docker] Spawning container ${containerId}`);
+  console.log(`[Docker] Base image: ${options.config.baseImage}`);
+  console.log(`[Docker] Project path: ${options.projectPath}`);
+  console.log(`[Docker] Prompt: ${options.prompt.substring(0, 100)}...`);
+
+  // TODO: Implement actual Docker container spawning
+  // For now, return a mock result
+  
+  try {
+    // Simulate container execution
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const duration = Date.now() - startTime;
+
+    return {
+      containerId,
+      output: `Mock output from container ${containerId}`,
+      exitCode: 0,
+      duration,
+    };
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    return {
+      containerId,
+      output: "",
+      error: error instanceof Error ? error.message : String(error),
+      exitCode: 1,
+      duration,
+    };
+  }
+}
+
+/**
+ * Stop a running container
+ */
+export async function stopContainer(containerId: string): Promise<void> {
+  console.log(`[Docker] Stopping container ${containerId}`);
+  
+  // TODO: Implement actual Docker container stopping
+  // docker stop <containerId>
+}
+
+/**
+ * Remove a container
+ */
+export async function removeContainer(containerId: string): Promise<void> {
+  console.log(`[Docker] Removing container ${containerId}`);
+  
+  // TODO: Implement actual Docker container removal
+  // docker rm <containerId>
+}
+
+/**
+ * Get container logs
+ */
+export async function getContainerLogs(containerId: string): Promise<string> {
+  console.log(`[Docker] Getting logs for container ${containerId}`);
+  
+  // TODO: Implement actual Docker logs retrieval
+  // docker logs <containerId>
+  
+  return `Mock logs for container ${containerId}`;
+}
+
+/**
+ * Check if a container is running
+ */
+export async function isContainerRunning(containerId: string): Promise<boolean> {
+  console.log(`[Docker] Checking if container ${containerId} is running`);
+  
+  // TODO: Implement actual Docker container status check
+  // docker ps --filter id=<containerId>
+  
+  return false;
+}
+
+/**
+ * List all Claude Code containers
+ */
+export async function listContainers(): Promise<string[]> {
+  console.log(`[Docker] Listing all Claude Code containers`);
+  
+  // TODO: Implement actual Docker container listing
+  // docker ps --filter name=claude-code-*
+  
+  return [];
+}
+
+/**
+ * Clean up stopped containers
+ */
+export async function cleanupContainers(): Promise<void> {
+  console.log(`[Docker] Cleaning up stopped containers`);
+  
+  // TODO: Implement actual Docker container cleanup
+  // docker container prune --filter label=claude-code-service
+}
+
+/**
+ * Validate container configuration
+ */
+export function validateContainerConfig(config: ContainerConfig): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!config.baseImage) {
+    errors.push("Base image is required");
+  }
+
+  if (config.resources?.memory) {
+    const memoryRegex = /^\d+(Mi|Gi|M|G)$/;
+    if (!memoryRegex.test(config.resources.memory)) {
+      errors.push("Invalid memory format. Use format like '2Gi' or '512Mi'");
+    }
+  }
+
+  if (config.resources?.timeout) {
+    const timeoutRegex = /^\d+s$/;
+    if (!timeoutRegex.test(config.resources.timeout)) {
+      errors.push("Invalid timeout format. Use format like '300s'");
+    }
+  }
+
+  if (config.security?.runAsUser !== undefined) {
+    if (config.security.runAsUser < 0) {
+      errors.push("runAsUser must be a non-negative integer");
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Build Docker command from container config
+ */
+export function buildDockerCommand(options: ContainerSpawnOptions): string[] {
+  const { config, projectPath, workingDir } = options;
+  
+  const cmd: string[] = ['docker', 'run'];
+  
+  // Add name
+  cmd.push('--name', generateContainerId());
+  
+  // Add resource limits
+  if (config.resources?.memory) {
+    cmd.push('--memory', config.resources.memory);
+  }
+  if (config.resources?.cpu) {
+    cmd.push('--cpus', config.resources.cpu);
+  }
+  
+  // Add security options
+  if (config.security?.runAsUser !== undefined) {
+    cmd.push('--user', String(config.security.runAsUser));
+  }
+  if (config.security?.readOnlyRoot) {
+    cmd.push('--read-only');
+  }
+  if (config.security?.noNewPrivileges) {
+    cmd.push('--security-opt', 'no-new-privileges');
+  }
+  if (config.security?.dropCapabilities) {
+    config.security.dropCapabilities.forEach(cap => {
+      cmd.push('--cap-drop', cap);
+    });
+  }
+  if (config.security?.networkMode) {
+    cmd.push('--network', config.security.networkMode);
+  }
+  
+  // Add volumes
+  cmd.push('-v', `${projectPath}:${workingDir || '/workspace'}:ro`);
+  if (config.volumes) {
+    config.volumes.forEach(vol => {
+      cmd.push('-v', vol);
+    });
+  }
+  
+  // Add environment variables
+  if (config.env) {
+    Object.entries(config.env).forEach(([key, value]) => {
+      cmd.push('-e', `${key}=${value}`);
+    });
+  }
+  
+  // Add labels for cleanup
+  cmd.push('--label', 'claude-code-service=true');
+  
+  // Remove container after execution
+  cmd.push('--rm');
+  
+  // Add base image
+  cmd.push(config.baseImage);
+  
+  return cmd;
+}
+

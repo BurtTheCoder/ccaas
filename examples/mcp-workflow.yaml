@@ -1,0 +1,157 @@
+# MCP Integration Example Workflow
+# Demonstrates using MCP servers for GitHub, Linear, and Web Search
+
+name: MCP Integration Demo
+description: Example workflow showcasing MCP server capabilities
+version: 1.0.0
+
+agents:
+  # Agent 1: GitHub Repository Analyzer
+  - name: github_analyzer
+    role: GitHub Repository Analyzer
+    container:
+      image: claude-code:latest
+      githubRepo: https://github.com/anthropics/anthropic-sdk-typescript
+      workingDir: /workspace
+      mcpServers:
+        - github
+        - web_search
+      resources:
+        memory: 2Gi
+        timeout: 300s
+        cpu: "2"
+    prompt: |
+      Analyze this GitHub repository using the GitHub MCP server.
+
+      Tasks:
+      1. List all open issues
+      2. Find issues labeled "bug" or "enhancement"
+      3. Search recent pull requests
+      4. Analyze repository structure and documentation
+      5. Search web for similar projects and best practices
+
+      Store your findings in the 'analysis_result' variable.
+    output: analysis_result
+    next: issue_manager
+
+  # Agent 2: Issue Manager with Linear
+  - name: issue_manager
+    role: Linear Issue Manager
+    container:
+      image: claude-code:latest
+      mcpServers:
+        - github
+        - linear
+      resources:
+        memory: 2Gi
+        timeout: 300s
+    prompt: |
+      Based on the repository analysis:
+      ${analysis_result}
+
+      Use Linear MCP server to:
+      1. Create Linear issues for high-priority bugs found in GitHub
+      2. Link Linear issues to corresponding GitHub issues
+      3. Assign appropriate priority levels
+      4. Add relevant labels and projects
+      5. Set estimates based on complexity
+
+      Store the created issue IDs in 'created_issues'.
+    output: created_issues
+    next: slack_notifier
+    onError:
+      action: continue
+      next: slack_notifier
+
+  # Agent 3: Slack Notification Agent
+  - name: slack_notifier
+    role: Slack Notifier
+    container:
+      image: claude-code:latest
+      mcpServers:
+        - slack
+      resources:
+        memory: 1Gi
+        timeout: 60s
+    prompt: |
+      Send a summary to Slack about the workflow results.
+
+      Analysis Results:
+      ${analysis_result}
+
+      Created Issues:
+      ${created_issues}
+
+      Post to #engineering channel with:
+      - Repository analysis summary
+      - Number of issues found
+      - Links to created Linear issues
+      - Recommended next actions
+    next: researcher
+
+  # Agent 4: Research Agent (demonstrates web search)
+  - name: researcher
+    role: Research Agent
+    container:
+      image: claude-code:latest
+      workingDir: /workspace
+      mcpServers:
+        - web_search
+        - filesystem
+      resources:
+        memory: 4Gi
+        timeout: 600s
+    prompt: |
+      Research best practices for the technologies found in the repository.
+
+      Repository Analysis:
+      ${analysis_result}
+
+      Use web search to find:
+      1. Latest best practices for the main technologies
+      2. Common pitfalls and solutions
+      3. Performance optimization techniques
+      4. Security considerations
+      5. Industry standards and patterns
+
+      Create a markdown report at /workspace/research-report.md with:
+      - Executive summary
+      - Key findings
+      - Recommendations
+      - External resources and links
+
+      Use filesystem MCP to save the report.
+    output: research_report
+
+workflow:
+  trigger:
+    type: manual
+
+  max_iterations: 5
+  max_consecutive_failures: 2
+  max_runtime: 1800s  # 30 minutes
+
+  budget:
+    max_cost_per_execution: $5.00
+    daily_max_cost: $50.00
+    pause_on_exceed: true
+    alert_at_percent: 80
+
+  notifications:
+    slack:
+      channel: "#engineering"
+      notify_on:
+        - completed
+        - failed
+        - budget_exceeded
+
+  safety:
+    require_human_approval_for: []
+    validation:
+      min_score: 6.0
+      require_tests: false
+
+  # Context available to all agents
+  context:
+    WORKFLOW_TYPE: mcp_integration_demo
+    EXECUTION_MODE: automated

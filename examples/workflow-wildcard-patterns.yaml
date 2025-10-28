@@ -1,0 +1,89 @@
+# Example: Wildcard Pattern Configuration
+# This workflow demonstrates wildcard pattern usage for sub-tools
+
+name: Multi-Language Project Builder
+description: Build and test projects in multiple languages
+version: "1.0"
+
+agents:
+  - name: nodejs-builder
+    role: Build and test Node.js projects
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Bash(npm:*)        # All npm commands allowed
+        - Bash(node:*)       # All node commands allowed
+        - Bash(pnpm:*)       # All pnpm commands allowed
+        - Bash(yarn:*)       # All yarn commands allowed
+      resources:
+        memory: 4Gi
+        cpu: "4"
+        timeout: 20m
+    prompt: |
+      Build and test the Node.js project:
+      1. Install dependencies (npm/pnpm/yarn)
+      2. Run build scripts
+      3. Run tests
+      4. Generate coverage reports
+
+      Report on build and test results.
+    output: nodejs_results
+
+  - name: python-builder
+    role: Build and test Python projects
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Bash(python:*)     # All python commands allowed
+        - Bash(pip:*)        # All pip commands allowed
+        - Bash(pytest:*)     # All pytest commands allowed
+      resources:
+        memory: 4Gi
+        cpu: "4"
+        timeout: 20m
+    prompt: |
+      Build and test the Python project:
+      1. Install dependencies with pip
+      2. Run pytest
+      3. Check code coverage
+
+      Report on test results.
+    output: python_results
+
+  - name: git-manager
+    role: Manage git operations
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Bash(git:*)        # All git commands allowed
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: |
+      Manage git operations:
+      1. Check repository status
+      2. Review recent commits
+      3. Check for uncommitted changes
+      4. Analyze branch structure
+
+      Results from previous steps:
+      - Node.js: ${nodejs_results}
+      - Python: ${python_results}
+
+      Provide git repository status report.
+    output: git_status
+
+workflow:
+  trigger:
+    type: manual
+  max_iterations: 10
+  max_consecutive_failures: 2
+  max_runtime: 60m
+  budget:
+    max_cost_per_execution: "$15.00"
+    daily_max_cost: "$150.00"
+    pause_on_exceed: true

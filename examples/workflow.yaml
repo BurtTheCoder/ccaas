@@ -1,0 +1,222 @@
+# Example Multi-Agent Workflow Configuration
+# Place this file at .claude/workflow.yaml in your project directory
+
+name: Code Review Workflow
+description: Automated code review with multiple specialized agents
+version: 1.0.0
+
+agents:
+  # Agent 1: Code Analyzer
+  - name: analyzer
+    role: Code Analyzer
+    container:
+      baseImage: claude-base:latest
+      tools:
+        - Read
+        - Edit
+      resources:
+        memory: 2Gi
+        timeout: 300s
+    prompt: |
+      Analyze the code changes in the pull request.
+      
+      PR Number: ${PR_NUMBER}
+      Files changed: ${FILES_CHANGED}
+      
+      Look for:
+      1. Potential bugs and logic errors
+      2. Security vulnerabilities
+      3. Performance issues
+      4. Code quality and best practices
+      5. Test coverage gaps
+      
+      Provide a structured analysis with severity levels.
+    output: analysis_result
+    next: reviewer
+
+  # Agent 2: Code Reviewer
+  - name: reviewer
+    role: Code Reviewer
+    container:
+      baseImage: claude-base:latest
+      tools:
+        - Read
+        - Write
+      resources:
+        memory: 2Gi
+        timeout: 300s
+    prompt: |
+      Based on the analysis results:
+      ${analysis_result}
+      
+      Write a comprehensive code review that includes:
+      1. Executive summary
+      2. Detailed findings with file locations
+      3. Specific recommendations
+      4. Code examples for suggested fixes
+      5. Overall assessment (approve, request changes, comment)
+      
+      Format the review in GitHub-flavored Markdown.
+    output: review_text
+    conditions:
+      - if: ${analysis_result} contains "critical"
+        then:
+          - action: notify
+            channel: "#urgent-reviews"
+        next: security_check
+      - else:
+        next: commenter
+
+  # Agent 3: Security Checker (conditional)
+  - name: security_check
+    role: Security Specialist
+    container:
+      baseImage: claude-security:latest
+      tools:
+        - Read
+        - Bash
+      resources:
+        memory: 4Gi
+        timeout: 600s
+    prompt: |
+      Perform a deep security analysis on the code changes.
+      
+      Previous analysis flagged critical issues:
+      ${analysis_result}
+      
+      Run security scanning tools and provide:
+      1. Vulnerability assessment
+      2. OWASP Top 10 check
+      3. Dependency vulnerabilities
+      4. Secrets detection
+      5. Mitigation recommendations
+    output: security_report
+    next: commenter
+    onError:
+      action: notify
+      comment: "Security check failed, manual review required"
+
+  # Agent 4: GitHub Commenter
+  - name: commenter
+    role: GitHub Commenter
+    container:
+      baseImage: claude-base:latest
+      tools:
+        - Bash
+      mcpServers:
+        - name: github
+          env:
+            GITHUB_TOKEN: ${GITHUB_TOKEN}
+      resources:
+        memory: 1Gi
+        timeout: 60s
+    prompt: |
+      Post the following review to GitHub PR #${PR_NUMBER}:
+      
+      ${review_text}
+      
+      ${security_report}
+      
+      Use the GitHub API to:
+      1. Post the review as a comment
+      2. Add appropriate labels (needs-work, security-review, etc.)
+      3. Request changes if critical issues found
+    onError:
+      action: retry
+      maxRetries: 3
+      next: notifier
+
+  # Agent 5: Notifier (error handler)
+  - name: notifier
+    role: Notification Handler
+    container:
+      baseImage: claude-base:latest
+      tools:
+        - Bash
+      mcpServers:
+        - name: slack
+      resources:
+        memory: 512Mi
+        timeout: 30s
+    prompt: |
+      Send a notification to Slack about the workflow failure.
+      
+      Include:
+      - PR number: ${PR_NUMBER}
+      - Error details
+      - Link to the PR
+      - Request for manual review
+
+workflow:
+  # Trigger configuration
+  trigger:
+    type: webhook
+    endpoint: /webhook/github
+
+  # Execution limits
+  maxIterations: 10
+  maxConsecutiveFailures: 3
+  maxRuntime: 1800s  # 30 minutes
+
+  # Budget controls
+  budget:
+    maxCostPerExecution: $10.00
+    dailyMaxCost: $100.00
+    monthlyMaxCost: $2000.00
+    pauseOnExceed: true
+    alertAtPercent: 80
+
+  # Notifications
+  notifications:
+    slack:
+      channel: "#code-reviews"
+      notifyOn:
+        - completed
+        - failed
+        - budget_exceeded
+        - critical_issue
+      includeLinks: true
+    
+    email:
+      enabled: true
+      to:
+        - team@example.com
+      triggers:
+        - event: critical_issue
+        - event: budget_alert
+          threshold: 90
+
+  # Safety controls
+  safety:
+    # Require human approval for certain actions
+    requireHumanApprovalFor:
+      - action: merge_pr
+      - action: deploy_to_production
+      - action: delete_branch
+    
+    # Never auto-merge these conditions
+    neverAutoMerge:
+      - hasLabel: "work-in-progress"
+      - hasLabel: "do-not-merge"
+      - failedChecks: true
+    
+    # Validation requirements
+    validation:
+      minScore: 7.0
+      requireTests: true
+      requirePassingTests: true
+      minCoverage: 80
+    
+    # Audit logging
+    audit:
+      enabled: true
+      logAllCommands: true
+      logAllFileAccess: true
+      retentionDays: 90
+
+  # Shared context (available to all agents)
+  context:
+    REPO_NAME: ${GITHUB_REPOSITORY}
+    BRANCH: ${GITHUB_REF}
+    AUTHOR: ${GITHUB_ACTOR}
+

@@ -1,0 +1,59 @@
+# Example Container Configuration
+# Place this file at .claude/container.yaml in your project directory
+
+name: my-project
+baseImage: claude-base:latest
+
+# Tools available to Claude Code
+tools:
+  allowed:
+    - Read       # Read files
+    - Write      # Write files
+    - Edit       # Edit files
+    - Bash       # Execute shell commands
+    - Browser    # Web browsing
+    - Search     # Web search
+    - Computer   # Computer control
+
+# MCP (Model Context Protocol) Servers
+mcpServers:
+  - name: github
+    env:
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+  
+  - name: linear
+    env:
+      LINEAR_API_KEY: ${LINEAR_API_KEY}
+  
+  - name: slack
+    env:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+
+# Skills (pre-defined capabilities)
+skills:
+  - code-review
+  - bug-fixing
+  - documentation
+  - testing
+
+# Resource limits
+resources:
+  memory: 2Gi      # Memory limit (Mi or Gi)
+  timeout: 600s    # Execution timeout
+  cpu: "2"         # CPU cores
+
+# Security settings
+security:
+  runAsUser: 1000                    # Run as non-root user
+  readOnlyRoot: false                # Read-only root filesystem
+  noNewPrivileges: true              # Prevent privilege escalation
+  dropCapabilities:                  # Drop Linux capabilities
+    - ALL
+  networkMode: bridge                # Network mode (bridge, host, none)
+  allowedDomains:                    # Whitelist domains for network access
+    - github.com
+    - api.github.com
+    - api.linear.app
+    - slack.com
+    - api.slack.com
+

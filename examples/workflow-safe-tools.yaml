@@ -1,0 +1,58 @@
+# Example: Safe Tools Configuration
+# This workflow uses only low-risk, read-only tools
+
+name: Safe Code Review
+description: Review code changes using safe tools only
+version: "1.0"
+
+agents:
+  - name: code-reviewer
+    role: Review code for potential issues
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Grep
+        - Glob
+        - TodoWrite
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: |
+      Review the codebase for:
+      1. Code quality issues
+      2. Security vulnerabilities
+      3. Performance concerns
+
+      Create a todo list of recommended improvements.
+    output: review_findings
+
+  - name: security-analyzer
+    role: Analyze security issues
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Grep
+        - WebSearch
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: |
+      Based on the review findings: ${review_findings}
+
+      Search for known security vulnerabilities and provide recommendations.
+    output: security_report
+
+workflow:
+  trigger:
+    type: manual
+  max_iterations: 10
+  max_consecutive_failures: 2
+  max_runtime: 30m
+  budget:
+    max_cost_per_execution: "$5.00"
+    daily_max_cost: "$50.00"
+    pause_on_exceed: true

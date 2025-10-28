@@ -1,0 +1,68 @@
+# Example: Invalid Tools Configuration (This should FAIL validation)
+# This workflow intentionally includes invalid and dangerous tools for testing
+
+name: Invalid Tools Test
+description: This workflow should fail validation
+version: "1.0"
+
+agents:
+  - name: invalid-tool-agent
+    role: Test invalid tool names
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - InvalidTool           # Does not exist
+        - FakeTool              # Does not exist
+        - SuperPowerTool        # Does not exist
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: "This agent should fail validation due to invalid tools"
+
+  - name: dangerous-command-agent
+    role: Test dangerous commands
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Bash(sudo)            # Explicitly blocked (dangerous)
+        - Bash(rm:*)            # Explicitly blocked (dangerous)
+        - Bash(dd)              # Explicitly blocked (dangerous)
+        - Bash(chmod)           # Explicitly blocked (dangerous)
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: "This agent should fail validation due to dangerous commands"
+
+  - name: unrestricted-bash-agent
+    role: Test unrestricted bash
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Bash                  # Requires sub-tool specification
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: "This agent should fail validation - Bash requires sub-tools"
+
+workflow:
+  trigger:
+    type: manual
+  max_iterations: 5
+  max_consecutive_failures: 1
+  max_runtime: 10m
+
+# Expected Errors:
+# 1. "Unknown tool: 'InvalidTool'. Available tools: Read, Write, Edit, Bash, ..."
+# 2. "Unknown tool: 'FakeTool'. Available tools: Read, Write, Edit, Bash, ..."
+# 3. "Unknown tool: 'SuperPowerTool'. Available tools: Read, Write, Edit, Bash, ..."
+# 4. "Tool 'Bash(sudo)' is a dangerous command and is explicitly blocked for security"
+# 5. "Tool 'Bash(rm:*)' is a dangerous command and is explicitly blocked for security"
+# 6. "Tool 'Bash(dd)' is a dangerous command and is explicitly blocked for security"
+# 7. "Tool 'Bash(chmod)' is a dangerous command and is explicitly blocked for security"
+# 8. "Tool 'Bash' requires sub-tool specification"

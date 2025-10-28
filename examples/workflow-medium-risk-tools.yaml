@@ -1,0 +1,64 @@
+# Example: Medium Risk Tools Configuration
+# This workflow includes write operations but no command execution
+
+name: Documentation Updater
+description: Update documentation based on code changes
+version: "1.0"
+
+agents:
+  - name: doc-analyzer
+    role: Analyze what documentation needs updating
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Grep
+        - Glob
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 10m
+    prompt: |
+      Analyze the codebase and identify:
+      1. Functions/classes missing documentation
+      2. Outdated documentation
+      3. Incomplete README sections
+
+      Create a list of documentation updates needed.
+    output: doc_updates_needed
+
+  - name: doc-writer
+    role: Write and update documentation
+    container:
+      image: claude-code:latest
+      tools:
+        - Read
+        - Write
+        - Edit
+        - Grep
+        - Glob
+      resources:
+        memory: 2Gi
+        cpu: "2"
+        timeout: 15m
+    prompt: |
+      Based on the analysis: ${doc_updates_needed}
+
+      Update the documentation:
+      1. Add missing function documentation
+      2. Update outdated sections
+      3. Improve README clarity
+
+      Make the changes directly to the files.
+    output: doc_changes
+
+workflow:
+  trigger:
+    type: manual
+  max_iterations: 10
+  max_consecutive_failures: 2
+  max_runtime: 30m
+  budget:
+    max_cost_per_execution: "$10.00"
+    daily_max_cost: "$100.00"
+    pause_on_exceed: true
