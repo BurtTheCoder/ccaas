@@ -73,14 +73,21 @@ Claude Code Service allows you to:
 - **Validation Gates**: Pre-execution validation and approval workflows
 - **State Management**: Persistent workflow state and context
 
+#### Enterprise Features (Newly Implemented)
+- **Real-time Workflow Streaming**: Server-Sent Events (SSE) for live progress updates
+- **Slack Notifications**: Rich Block Kit formatted messages with budget alerts
+- **GitHub Integration**: Automatic PR review comments
+- **MCP Server Configuration**: 9 built-in community ML model context servers
+- **Tool Access Control**: Risk-based tool validation with audit logging
+
 ### 🚧 To Be Implemented
 
-- Real-time workflow progress streaming
 - Container image pre-building and caching
-- Advanced metrics and analytics
-- Linear integration for issue tracking
+- Advanced metrics and analytics dashboard
+- Direct Linear integration (webhook and API)
 - Email notifications
 - Workflow templates library
+- Project detail/edit page enhancements
 
 ## Getting Started
 
