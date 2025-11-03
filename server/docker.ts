@@ -2,6 +2,13 @@ import { spawn, ChildProcess } from 'child_process';
 import { randomBytes } from 'crypto';
 import { MCPServerConfig } from './mcpManager';
 import { ToolValidator, validateToolConfiguration } from './toolValidator';
+import {
+  extractImageCacheConfig,
+  calculateDependenciesHash,
+  getCachedImage,
+  recordCacheHit,
+  shouldCacheImage,
+} from './imageCache';
 
 export interface ContainerConfig {
   image: string;
@@ -29,14 +36,49 @@ export interface ExecutionResult {
     valid: boolean;
     errors?: string[];
   };
+  cacheHit?: boolean; // Whether a cached image was used
+  cachedImageId?: string; // ID of the cached image used
 }
 
 /**
  * Spawn a Docker container with Claude Code installed
+ * Automatically checks for cached images if caching is enabled
  */
-export async function spawnContainer(config: ContainerConfig): Promise<string> {
+export async function spawnContainer(
+  config: ContainerConfig,
+  options?: { useCache?: boolean }
+): Promise<string> {
   const containerId = `claude-code-${randomBytes(8).toString('hex')}`;
-  
+  let imageToUse = config.image;
+  let cachedImageId: string | undefined;
+
+  // Check for cached image if caching is enabled
+  const useCache = options?.useCache !== false && shouldCacheImage(config);
+
+  if (useCache) {
+    try {
+      const cacheConfig = extractImageCacheConfig(config);
+      const dependenciesHash = calculateDependenciesHash(cacheConfig);
+      const cached = await getCachedImage(dependenciesHash);
+
+      if (cached) {
+        console.log(`[Docker] Using cached image: ${cached.tag} (hits: ${cached.cacheHits})`);
+        imageToUse = cached.tag;
+        cachedImageId = cached.imageId;
+
+        // Record cache hit
+        await recordCacheHit(cached.imageId).catch(err => {
+          console.error('[Docker] Failed to record cache hit:', err);
+        });
+      } else {
+        console.log('[Docker] No cached image found, using base image:', config.image);
+      }
+    } catch (error) {
+      console.error('[Docker] Error checking image cache:', error);
+      // Fall back to using the original image
+    }
+  }
+
   const dockerArgs = [
     'run',
     '-d', // Detached mode
@@ -60,15 +102,15 @@ export async function spawnContainer(config: ContainerConfig): Promise<string> {
     }
   }
 
-  // Add image
-  dockerArgs.push(config.image);
+  // Add image (either cached or original)
+  dockerArgs.push(imageToUse);
 
   // Keep container running
   dockerArgs.push('tail', '-f', '/dev/null');
 
   return new Promise((resolve, reject) => {
     const proc = spawn('docker', dockerArgs);
-    
+
     let stdout = '';
     let stderr = '';
 

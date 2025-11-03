@@ -11,8 +11,20 @@ export const ENV = {
   slackBotToken: process.env.SLACK_BOT_TOKEN ?? "",
   slackSigningSecret: process.env.SLACK_SIGNING_SECRET ?? "",
   slackDefaultChannel: process.env.SLACK_DEFAULT_CHANNEL ?? "",
-  // MCP Server Credentials
+  // Email Configuration
+  emailProvider: process.env.EMAIL_PROVIDER ?? "none",
+  emailFromAddress: process.env.EMAIL_FROM_ADDRESS ?? "",
+  emailFromName: process.env.EMAIL_FROM_NAME ?? "Claude Code Service",
+  // SMTP Configuration
+  smtpHost: process.env.SMTP_HOST ?? "",
+  smtpPort: parseInt(process.env.SMTP_PORT ?? "587", 10),
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  smtpUser: process.env.SMTP_USER ?? "",
+  smtpPassword: process.env.SMTP_PASSWORD ?? "",
+  // Linear Integration
   linearApiKey: process.env.LINEAR_API_KEY ?? "",
+  linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET ?? "",
+  // MCP Server Credentials
   braveApiKey: process.env.BRAVE_API_KEY ?? "",
   googleDriveCredentials: process.env.GOOGLE_DRIVE_CREDENTIALS ?? "",
   postgresConnectionString: process.env.POSTGRES_CONNECTION_STRING ?? "",

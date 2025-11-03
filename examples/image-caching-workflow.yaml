@@ -1,0 +1,93 @@
+name: Image Pre-building and Caching Demo
+description: Demonstrates how to use container image caching for faster execution
+version: "1.0.0"
+
+agents:
+  # Agent 1: Build cached image with common dependencies
+  - name: image-builder
+    role: Pre-build container images with common dependencies
+    container:
+      image: ubuntu:22.04
+      workingDir: /workspace
+      resources:
+        memory: 2048mb
+        timeout: 600s
+        cpu: "2"
+    prompt: |
+      You are responsible for pre-building Docker images to speed up future executions.
+
+      Build a Docker image with the following dependencies:
+      - npm packages: typescript, @types/node, express, zod
+      - pip packages: numpy, pandas, requests
+      - apt packages: git, curl, wget
+
+      Use the image caching API to build and save this image.
+
+  # Agent 2: Use cached image for fast execution
+  - name: fast-executor
+    role: Execute code using pre-built cached image
+    container:
+      image: claude-code:latest
+      workingDir: /workspace
+      resources:
+        memory: 1024mb
+        timeout: 300s
+        cpu: "1"
+    prompt: |
+      You are executing with a pre-built cached image.
+
+      Notice how fast this container started compared to building from scratch!
+
+      Create a simple TypeScript project:
+      1. Initialize package.json
+      2. Create a simple Express server
+      3. Add TypeScript configuration
+
+      The dependencies are already installed in the cached image.
+    output: execution_result
+    next: cache-stats
+
+  # Agent 3: Report cache statistics
+  - name: cache-stats
+    role: Report on image cache performance
+    container:
+      image: claude-code:latest
+      workingDir: /workspace
+      resources:
+        memory: 512mb
+        timeout: 120s
+        cpu: "1"
+    prompt: |
+      Query the image cache statistics and report:
+      - Total cached images
+      - Total cache size
+      - Cache hit ratio
+      - Most used images
+
+      Use the image caching API to get these statistics.
+
+workflow:
+  trigger:
+    type: manual
+    endpoint: /webhooks/image-caching-demo
+
+  max_iterations: 3
+  max_consecutive_failures: 2
+  max_runtime: 30m
+
+  budget:
+    max_cost_per_execution: $5.00
+    daily_max_cost: $50.00
+    pause_on_exceed: true
+
+  notifications:
+    on_complete:
+      - type: slack
+        channel: "#claude-code"
+    on_failure:
+      - type: slack
+        channel: "#claude-code-alerts"
+
+  context:
+    project_name: "Image Caching Demo"
+    cache_enabled: true

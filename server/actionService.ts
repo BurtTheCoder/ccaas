@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { getSlackClient, SlackBlock } from "./slackClient";
 import * as formatter from "./slackFormatter";
+import { linearClient } from "./linearClient";
+import * as linearFormatter from "./linearFormatter";
 
 // Define the schema for a single action
 export const actionSchema = z.object({
@@ -31,7 +33,16 @@ export class ActionService {
         await this.mergeBranch(action);
         break;
       case "update_linear_issue":
+      case "linear.updateIssue":
         await this.updateLinearIssue(action);
+        break;
+      case "create_linear_issue":
+      case "linear.createIssue":
+        await this.createLinearIssue(action);
+        break;
+      case "linear.addComment":
+      case "add_linear_comment":
+        await this.addLinearComment(action);
         break;
       case "notify":
         await this.notify(action);
@@ -84,9 +95,73 @@ export class ActionService {
   }
 
   private async updateLinearIssue(action: Action): Promise<void> {
-    const { issue_id, status, comment, labels, priority } = action;
-    console.log(`[ActionService] STUB: Would call Linear API to update issue ${issue_id}`);
-    console.log(`[ActionService] STUB: linear.issueUpdate('${issue_id}', { status: '${status}', comment: '${comment}', labels: ${JSON.stringify(labels)}, priority: '${priority}' })`);
+    const { issue_id, issueId, status, stateId, comment, body, labels, priority, assigneeId, projectId } = action;
+
+    // Support both issue_id and issueId parameter names
+    const targetIssueId = (issueId || issue_id) as string | undefined;
+
+    if (!targetIssueId) {
+      console.warn('[ActionService] update_linear_issue requires issue_id or issueId parameter');
+      return;
+    }
+
+    if (!linearClient.isConfigured()) {
+      console.log(`[ActionService] Linear not configured - would update issue ${targetIssueId}`);
+      return;
+    }
+
+    try {
+      // Build updates object
+      const updates: any = {};
+
+      if (stateId) {
+        updates.stateId = stateId;
+      } else if (status) {
+        // Legacy support: if 'status' is provided instead of 'stateId'
+        updates.stateId = status;
+      }
+
+      if (priority !== undefined) {
+        updates.priority = priority;
+      }
+
+      if (assigneeId !== undefined) {
+        updates.assigneeId = assigneeId;
+      }
+
+      if (projectId !== undefined) {
+        updates.projectId = projectId;
+      }
+
+      // Update the issue
+      if (Object.keys(updates).length > 0) {
+        console.log(`[ActionService] Updating Linear issue ${targetIssueId}:`, updates);
+        const issue = await linearClient.updateIssue(targetIssueId, updates);
+
+        if (issue) {
+          console.log(`[ActionService] Successfully updated issue: ${issue.identifier}`);
+        } else {
+          console.warn(`[ActionService] Failed to update issue ${targetIssueId}`);
+        }
+      }
+
+      // Add comment if provided
+      const commentBody = (body || comment) as string | undefined;
+      if (commentBody) {
+        console.log(`[ActionService] Adding comment to Linear issue ${targetIssueId}`);
+        const commentResult = await linearClient.addComment(targetIssueId, commentBody);
+
+        if (commentResult) {
+          console.log(`[ActionService] Successfully added comment: ${commentResult.id}`);
+        } else {
+          console.warn(`[ActionService] Failed to add comment to issue ${targetIssueId}`);
+        }
+      }
+
+    } catch (error) {
+      console.error(`[ActionService] Error updating Linear issue ${targetIssueId}:`, error);
+      // Don't throw - log error but continue workflow
+    }
   }
 
   private async notify(action: Action): Promise<void> {
@@ -168,6 +243,77 @@ export class ActionService {
     } catch (error) {
       // Don't fail the workflow if Slack notification fails
       console.error('[ActionService] Error sending Slack notification:', error);
+    }
+  }
+
+  private async createLinearIssue(action: Action): Promise<void> {
+    const { teamId, title, description, priority, assigneeId, projectId, labels, stateId } = action;
+
+    if (!teamId || !title) {
+      console.warn('[ActionService] create_linear_issue requires teamId and title parameters');
+      return;
+    }
+
+    if (!linearClient.isConfigured()) {
+      console.log(`[ActionService] Linear not configured - would create issue: ${title}`);
+      return;
+    }
+
+    try {
+      console.log(`[ActionService] Creating Linear issue in team ${teamId}: ${title}`);
+
+      const issue = await linearClient.createIssue({
+        teamId: teamId as string,
+        title: title as string,
+        description: description as string | undefined,
+        priority: priority as number | undefined,
+        assigneeId: assigneeId as string | undefined,
+        projectId: projectId as string | undefined,
+        labels: labels as string[] | undefined,
+        stateId: stateId as string | undefined,
+      });
+
+      if (issue) {
+        console.log(`[ActionService] Successfully created issue: ${issue.identifier} (${issue.url})`);
+      } else {
+        console.warn(`[ActionService] Failed to create Linear issue`);
+      }
+    } catch (error) {
+      console.error(`[ActionService] Error creating Linear issue:`, error);
+      // Don't throw - log error but continue workflow
+    }
+  }
+
+  private async addLinearComment(action: Action): Promise<void> {
+    const { issueId, issue_id, body, comment } = action;
+
+    // Support both parameter names
+    const targetIssueId = (issueId || issue_id) as string | undefined;
+    const commentBody = (body || comment) as string | undefined;
+
+    if (!targetIssueId || !commentBody) {
+      console.warn('[ActionService] add_linear_comment requires issueId and body parameters');
+      return;
+    }
+
+    if (!linearClient.isConfigured()) {
+      console.log(`[ActionService] Linear not configured - would add comment to ${targetIssueId}`);
+      return;
+    }
+
+    try {
+      console.log(`[ActionService] Adding comment to Linear issue ${targetIssueId}`);
+
+      const commentResult = await linearClient.addComment(targetIssueId, commentBody);
+
+      if (commentResult) {
+        console.log(`[ActionService] Successfully added comment: ${commentResult.id}`);
+      } else {
+        console.warn(`[ActionService] Failed to add comment to issue ${targetIssueId}`);
+      }
+    } catch (error) {
+      console.error(`[ActionService] Error adding Linear comment:`, error);
+      // Don't throw - log error but continue workflow
     }
   }
 

@@ -1,0 +1,230 @@
+name: "Application Deployment"
+description: "Automated deployment pipeline with validation, testing, and rollback capabilities"
+version: "1.0.0"
+
+agents:
+  - name: "pre-deploy-validator"
+    role: "Validate code is ready for deployment"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Bash", "Grep"]
+      resources:
+        memory: "4g"
+        timeout: "20m"
+    prompt: |
+      Pre-deployment validation:
+      1. Run full test suite: {{testCommand}}
+      2. Run linting: {{lintCommand}}
+      3. Check build succeeds: {{buildCommand}}
+      4. Verify environment variables set
+      5. Check dependencies are up to date
+
+      Environment: {{environment}}
+      Required env vars: {{requiredEnvVars}}
+
+      Report: READY / NOT_READY with details
+    output: "validation_report"
+    conditions:
+      - if: "validation_report contains READY"
+        then: "proceed"
+        next: "builder"
+      - if: "validation_report contains NOT_READY"
+        then: "fail"
+        next: null
+    onError:
+      action: "notify"
+      notify: true
+      comment: "Deployment validation failed"
+
+  - name: "builder"
+    role: "Build application artifacts for deployment"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash"]
+      resources:
+        memory: "8g"
+        timeout: "30m"
+    prompt: |
+      Build for {{environment}}:
+      1. Install dependencies
+      2. Run build: {{buildCommand}}
+      3. Optimize assets
+      4. Generate source maps: {{sourceMaps}}
+      5. Create deployment package
+
+      Build target: {{buildTarget}}
+      Optimization level: {{optimizationLevel}}
+    output: "build_report"
+    next: "deployer"
+
+  - name: "deployer"
+    role: "Deploy application to target environment"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash"]
+      resources:
+        memory: "4g"
+        timeout: "30m"
+    prompt: |
+      Deploy to {{environment}}:
+
+      Build artifacts: {{build_report}}
+
+      Deployment steps:
+      1. Backup current version
+      2. Deploy using: {{deployCommand}}
+      3. Run database migrations: {{migrationCommand}}
+      4. Update environment config
+      5. Warm up caches
+
+      Deployment target: {{deploymentTarget}}
+      Strategy: {{deploymentStrategy}}
+    output: "deployment_report"
+    next: "smoke-tester"
+
+  - name: "smoke-tester"
+    role: "Run smoke tests to verify deployment"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash"]
+      resources:
+        memory: "2g"
+        timeout: "15m"
+    prompt: |
+      Run smoke tests:
+      1. Health check endpoints
+      2. Critical user flows
+      3. Database connectivity
+      4. External service integration
+      5. Performance benchmarks
+
+      App URL: {{appUrl}}
+      Smoke test command: {{smokeTestCommand}}
+      Success criteria: {{successCriteria}}
+
+      Report: PASS/FAIL
+    output: "smoke_test_report"
+    conditions:
+      - if: "smoke_test_report contains PASS"
+        then: "success"
+        next: "finalizer"
+      - if: "smoke_test_report contains FAIL"
+        then: "rollback"
+        next: "rollback-handler"
+
+  - name: "rollback-handler"
+    role: "Rollback deployment if smoke tests fail"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash"]
+      resources:
+        memory: "2g"
+        timeout: "15m"
+    prompt: |
+      ROLLBACK REQUIRED
+
+      Smoke tests failed: {{smoke_test_report}}
+
+      Rollback steps:
+      1. Restore previous version
+      2. Revert database migrations
+      3. Clear caches
+      4. Verify rollback successful
+
+      Rollback command: {{rollbackCommand}}
+    output: "rollback_report"
+    onError:
+      action: "notify"
+      notify: true
+      comment: "CRITICAL: Rollback required!"
+
+  - name: "finalizer"
+    role: "Finalize deployment and send notifications"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash"]
+      resources:
+        memory: "1g"
+        timeout: "10m"
+    prompt: |
+      Finalize deployment:
+
+      Validation: {{validation_report}}
+      Build: {{build_report}}
+      Deployment: {{deployment_report}}
+      Smoke tests: {{smoke_test_report}}
+
+      Final tasks:
+      1. Tag release: {{releaseTag}}
+      2. Update deployment log
+      3. Send success notifications
+      4. Create deployment summary
+
+      Environment: {{environment}}
+      Deployed at: {{appUrl}}
+
+workflow:
+  trigger:
+    type: "webhook"
+    endpoint: "/webhooks/deploy"
+  max_iterations: 1
+  max_consecutive_failures: 0
+  max_runtime: "120m"
+  budget:
+    max_cost_per_execution: "$15.00"
+    pause_on_exceed: true
+  notifications:
+    on_completion:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+      email:
+        enabled: true
+        recipients: ["{{notificationEmail}}"]
+    on_failure:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+        mention: "@oncall"
+      email:
+        enabled: true
+        recipients: ["{{notificationEmail}}"]
+  safety:
+    require_human_approval_for:
+      - deploying_to_production
+    validation:
+      require_tests: true
+      require_passing_tests: true
+  context:
+    repository: "owner/repo"
+    environment: "staging"
+    testCommand: "npm test"
+    lintCommand: "npm run lint"
+    buildCommand: "npm run build"
+    requiredEnvVars: "DATABASE_URL,API_KEY"
+    buildTarget: "production"
+    optimizationLevel: "maximum"
+    sourceMaps: "true"
+    deployCommand: "npm run deploy"
+    migrationCommand: "npm run db:migrate"
+    deploymentTarget: "staging.example.com"
+    deploymentStrategy: "blue-green"
+    appUrl: "https://staging.example.com"
+    smokeTestCommand: "npm run test:smoke"
+    successCriteria: "All endpoints return 200"
+    rollbackCommand: "npm run deploy:rollback"
+    releaseTag: "v1.0.0"
+    slackChannel: "#deployments"
+    notificationEmail: "team@example.com"

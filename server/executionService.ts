@@ -1,6 +1,9 @@
 import { randomBytes } from 'crypto';
 import * as db from './db';
 import * as docker from './docker';
+import { getEmailService } from './emailService';
+import * as emailTemplates from './emailTemplates';
+import * as metricsService from './metricsService';
 
 export interface ExecuteOptions {
   projectId: number;
@@ -177,6 +180,76 @@ export async function execute(options: ExecuteOptions): Promise<ExecutionStatus>
     // Update budget tracking
     const today = new Date().toISOString().split('T')[0];
     await db.updateBudgetTracking(options.userId, today, cost, true, false);
+
+    // Record metrics for analytics
+    await metricsService.recordMetric(
+      options.userId,
+      'execution_duration',
+      result.duration,
+      { status: result.exitCode === 0 ? 'completed' : 'failed', projectId: options.projectId },
+      executionId
+    );
+    await metricsService.recordMetric(
+      options.userId,
+      'execution_cost',
+      cost,
+      { status: result.exitCode === 0 ? 'completed' : 'failed', projectId: options.projectId },
+      executionId
+    );
+
+    // Update daily metrics summary
+    await metricsService.updateDailyMetricsSummary(options.userId, today, {
+      totalExecutions: 1,
+      successCount: result.exitCode === 0 ? 1 : 0,
+      failureCount: result.exitCode === 0 ? 0 : 1,
+      totalDuration: result.duration,
+      totalCost: cost,
+    });
+
+    // Send email notification for execution completion or failure
+    try {
+      const emailService = getEmailService();
+      if (emailService.isConfigured()) {
+        const emailType = result.exitCode === 0 ? 'execution_completed' : 'execution_failed';
+        const recipients = await db.getEmailRecipientsForUser(options.userId, emailType, options.projectId);
+
+        if (recipients.length > 0) {
+          const project = await db.getProjectById(options.projectId);
+
+          if (result.exitCode === 0) {
+            const emailHtml = emailTemplates.executionCompletedTemplate({
+              executionId,
+              projectName: project?.name,
+              prompt: options.prompt,
+              duration: result.duration,
+              cost,
+              result: result.output,
+            });
+            await emailService.queueEmail({
+              to: recipients,
+              subject: `Execution Completed${project ? `: ${project.name}` : ''}`,
+              html: emailHtml,
+            });
+          } else {
+            const emailHtml = emailTemplates.executionFailedTemplate({
+              executionId,
+              projectName: project?.name,
+              prompt: options.prompt,
+              error: result.error,
+              duration: result.duration,
+              cost,
+            });
+            await emailService.queueEmail({
+              to: recipients,
+              subject: `Execution Failed${project ? `: ${project.name}` : ''}`,
+              html: emailHtml,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Execution] Failed to send execution email:', error);
+    }
 
     return {
       executionId,

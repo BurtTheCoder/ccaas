@@ -5,6 +5,9 @@ import * as db from './db';
 import { ConfigService } from './configService';
 import { ActionService } from './actionService';
 import { githubClient } from './githubClient';
+import { handleLinearWebhook as handleLinearWebhookImpl } from './linearWebhookHandler';
+
+export { handleLinearWebhookImpl as handleLinearWebhook };
 
 /**
  * Handle Slack slash command webhook

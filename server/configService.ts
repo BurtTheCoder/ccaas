@@ -85,6 +85,52 @@ export class ConfigService {
       return null;
     }
   }
+
+  async getWorkflowConfigRaw(projectPath: string): Promise<string | null> {
+    const configPath = path.join(this.projectRoot, projectPath, ".claude", "workflow.yaml");
+    try {
+      return await fs.readFile(configPath, "utf-8");
+    } catch (error) {
+      console.error(`Error reading workflow config for project at ${projectPath}:`, error);
+      return null;
+    }
+  }
+
+  async saveWorkflowConfig(projectPath: string, content: string): Promise<void> {
+    const configPath = path.join(this.projectRoot, projectPath, ".claude", "workflow.yaml");
+    try {
+      // Ensure the .claude directory exists
+      const dir = path.dirname(configPath);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(configPath, content, "utf-8");
+    } catch (error) {
+      console.error(`Error saving workflow config for project at ${projectPath}:`, error);
+      throw error;
+    }
+  }
+
+  async getContainerConfig(projectPath: string): Promise<string | null> {
+    const configPath = path.join(this.projectRoot, projectPath, ".claude", "container.yaml");
+    try {
+      return await fs.readFile(configPath, "utf-8");
+    } catch (error) {
+      console.error(`Error reading container config for project at ${projectPath}:`, error);
+      return null;
+    }
+  }
+
+  async saveContainerConfig(projectPath: string, content: string): Promise<void> {
+    const configPath = path.join(this.projectRoot, projectPath, ".claude", "container.yaml");
+    try {
+      // Ensure the .claude directory exists
+      const dir = path.dirname(configPath);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(configPath, content, "utf-8");
+    } catch (error) {
+      console.error(`Error saving container config for project at ${projectPath}:`, error);
+      throw error;
+    }
+  }
 }
 
 export const workflowConfigSchema = z.object({

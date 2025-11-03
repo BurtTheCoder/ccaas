@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Activity, GitBranch, FolderGit2, DollarSign, Key, Bell } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Activity, GitBranch, FolderGit2, DollarSign, Key, Bell, BarChart3, FileCode } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -31,7 +31,9 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Activity, label: "Executions", path: "/executions" },
   { icon: GitBranch, label: "Workflows", path: "/workflows" },
+  { icon: FileCode, label: "Templates", path: "/templates" },
   { icon: FolderGit2, label: "Projects", path: "/projects" },
+  { icon: BarChart3, label: "Analytics", path: "/analytics" },
   { icon: DollarSign, label: "Budget", path: "/budget" },
   { icon: Key, label: "API Keys", path: "/api-keys" },
   { icon: Bell, label: "Notifications", path: "/notifications" },

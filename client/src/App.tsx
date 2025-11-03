@@ -14,6 +14,8 @@ import Budget from "./pages/Budget";
 import ApiKeys from "./pages/ApiKeys";
 import Notifications from "./pages/Notifications";
 import ProjectDetail from "./pages/ProjectDetail";
+import Analytics from "./pages/Analytics";
+import Templates from "./pages/Templates";
 
 function Router() {
   return (
@@ -26,6 +28,8 @@ function Router() {
       <Route path={"/workflows/:id"} component={WorkflowDetail} />
       <Route path={"/projects"} component={Projects} />
       <Route path={"/projects/:id"} component={ProjectDetail} />
+      <Route path={"/templates"} component={Templates} />
+      <Route path={"/analytics"} component={Analytics} />
       <Route path={"/budget"} component={Budget} />
       <Route path={"/api-keys"} component={ApiKeys} />
       <Route path={"/notifications"} component={Notifications} />

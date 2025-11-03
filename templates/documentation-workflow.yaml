@@ -1,0 +1,141 @@
+name: "Documentation Generation"
+description: "Automated documentation generation for APIs, components, and codebases"
+version: "1.0.0"
+
+agents:
+  - name: "code-scanner"
+    role: "Scan codebase and extract documentation-worthy elements"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Grep", "Glob"]
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Scan the codebase for documentation needs:
+      1. Public APIs and endpoints
+      2. React components and their props
+      3. Utility functions and modules
+      4. Configuration options
+      5. Database schemas
+
+      Target paths: {{targetPaths}}
+      Documentation type: {{docType}}
+
+      Output structured list of elements needing documentation.
+    output: "code_inventory"
+    next: "doc-generator"
+
+  - name: "doc-generator"
+    role: "Generate comprehensive documentation from code"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Write", "Bash"]
+      resources:
+        memory: "4g"
+        timeout: "30m"
+    prompt: |
+      Based on code inventory: {{code_inventory}}
+
+      Generate documentation:
+      1. {{docType}} documentation with examples
+      2. Usage guidelines and best practices
+      3. Code snippets and demos
+      4. Parameter descriptions and types
+      5. Return values and error handling
+
+      Documentation format: {{docFormat}}
+      Output file: {{outputFile}}
+      Include examples: {{includeExamples}}
+
+      Ensure clarity, completeness, and accuracy.
+    output: "generated_docs"
+    next: "doc-reviewer"
+
+  - name: "doc-reviewer"
+    role: "Review documentation for quality, accuracy, and completeness"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read"]
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Review the generated documentation: {{generated_docs}}
+
+      Check for:
+      1. Accuracy - matches actual code behavior
+      2. Completeness - all public APIs documented
+      3. Clarity - easy to understand
+      4. Examples - working code samples
+      5. Formatting - consistent style
+
+      Rate: EXCELLENT / GOOD / NEEDS_IMPROVEMENT
+      Provide specific feedback for improvements.
+    output: "review_report"
+    conditions:
+      - if: "review_report contains EXCELLENT or GOOD"
+        then: "approve"
+        next: "doc-publisher"
+      - if: "review_report contains NEEDS_IMPROVEMENT"
+        then: "retry"
+        next: "doc-generator"
+
+  - name: "doc-publisher"
+    role: "Publish documentation and create pull request"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash", "Write"]
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Publish the documentation:
+
+      1. Commit documentation files
+      2. Create branch: docs/{{branchName}}
+      3. Create pull request with:
+         - Title: "docs: {{docTitle}}"
+         - Description: Summary of documentation added
+         - Link to code inventory and review
+
+      Docs location: {{docsDirectory}}
+      Auto-deploy: {{autoDeployDocs}}
+
+workflow:
+  trigger:
+    type: "manual"
+  max_iterations: 2
+  max_consecutive_failures: 1
+  max_runtime: "60m"
+  budget:
+    max_cost_per_execution: "$8.00"
+    pause_on_exceed: true
+  notifications:
+    on_completion:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+  safety:
+    require_human_approval_for:
+      - creating_pull_request
+  context:
+    repository: "owner/repo"
+    targetPaths: "src/api, src/components"
+    docType: "API Reference"
+    docFormat: "Markdown"
+    outputFile: "docs/api-reference.md"
+    includeExamples: "true"
+    branchName: "api-docs-update"
+    docTitle: "Update API Reference Documentation"
+    docsDirectory: "docs/"
+    autoDeployDocs: "false"
+    slackChannel: "#documentation"

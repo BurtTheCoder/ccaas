@@ -1,0 +1,146 @@
+name: "Test Case Generation"
+description: "Automated test generation for improved code coverage and quality"
+version: "1.0.0"
+
+agents:
+  - name: "coverage-analyzer"
+    role: "Analyze current test coverage and identify gaps"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Bash", "Grep", "Glob"]
+      resources:
+        memory: "4g"
+        timeout: "15m"
+    prompt: |
+      Analyze test coverage:
+      1. Run existing tests with coverage: {{testCommand}}
+      2. Identify untested files and functions
+      3. Find critical paths without tests
+      4. Analyze edge cases not covered
+      5. Prioritize by importance and risk
+
+      Target directory: {{targetDirectory}}
+      Min coverage goal: {{minCoverage}}%
+      Test framework: {{testFramework}}
+    output: "coverage_report"
+    next: "test-generator"
+
+  - name: "test-generator"
+    role: "Generate comprehensive test cases for uncovered code"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Write", "Bash"]
+      skills: ["superpowers:test-driven-development", "superpowers:testing-anti-patterns"]
+      resources:
+        memory: "4g"
+        timeout: "40m"
+    prompt: |
+      Based on coverage gaps: {{coverage_report}}
+
+      Generate tests for high-priority items:
+      1. Write unit tests for uncovered functions
+      2. Add integration tests for workflows
+      3. Include edge cases and error scenarios
+      4. Test boundary conditions
+      5. Avoid testing anti-patterns (no mocking without understanding)
+
+      Test style: {{testStyle}}
+      Assertion library: {{assertionLibrary}}
+      Focus on: {{testFocus}}
+
+      Generate working, executable tests.
+    output: "generated_tests"
+    next: "test-validator"
+
+  - name: "test-validator"
+    role: "Run and validate generated tests"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash", "Read"]
+      skills: ["superpowers:verification-before-completion"]
+      resources:
+        memory: "4g"
+        timeout: "20m"
+    prompt: |
+      Validate generated tests:
+      1. Run all new tests: {{testCommand}}
+      2. Verify tests pass
+      3. Check coverage improvement
+      4. Ensure no test flakiness
+      5. Validate test quality
+
+      Expected improvement: +{{expectedImprovement}}%
+
+      Report: PASS/FAIL with coverage delta
+    output: "validation_report"
+    conditions:
+      - if: "validation_report contains PASS"
+        then: "success"
+        next: "test-committer"
+      - if: "validation_report contains FAIL"
+        then: "retry"
+        next: "test-generator"
+
+  - name: "test-committer"
+    role: "Commit tests and create pull request"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash"]
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Create PR with test improvements:
+
+      Coverage before: {{coverage_report}}
+      Tests added: {{generated_tests}}
+      Validation: {{validation_report}}
+
+      PR details:
+      - Branch: test/coverage-improvement
+      - Title: "test: Improve test coverage for {{targetDirectory}}"
+      - Description: Coverage improvements and new tests
+      - Before/after coverage metrics
+
+      Use: gh pr create
+
+workflow:
+  trigger:
+    type: "cron"
+    schedule: "0 2 * * 1"
+  max_iterations: 2
+  max_consecutive_failures: 1
+  max_runtime: "90m"
+  budget:
+    max_cost_per_execution: "$12.00"
+    pause_on_exceed: true
+  notifications:
+    on_completion:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+  safety:
+    require_human_approval_for:
+      - creating_pull_request
+    validation:
+      require_tests: true
+      require_passing_tests: true
+  context:
+    repository: "owner/repo"
+    targetDirectory: "src"
+    minCoverage: "80"
+    testFramework: "vitest"
+    testCommand: "npm run test:coverage"
+    testStyle: "BDD"
+    assertionLibrary: "expect"
+    testFocus: "business logic, edge cases"
+    expectedImprovement: "10"
+    slackChannel: "#testing"

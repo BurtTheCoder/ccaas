@@ -6,9 +6,12 @@ import { ActionService } from './actionService';
 import { interpolateVariables, evaluateCondition, parseCost, formatCost, convertToContainerConfig } from './workflowUtils';
 import { getSlackClient } from './slackClient';
 import * as formatter from './slackFormatter';
+import { getEmailService } from './emailService';
+import * as emailTemplates from './emailTemplates';
 import { workflowEmitter } from './workflowEmitter';
 import { throttle } from './streamHandlers';
 import { ToolValidator, validateToolConfiguration } from './toolValidator';
+import * as metricsService from './metricsService';
 
 export interface WorkflowExecuteOptions {
   projectId: number;
@@ -131,6 +134,32 @@ export async function executeWorkflow(
     }
   } catch (error) {
     console.error('[Workflow] Failed to send workflow started notification:', error);
+  }
+
+  // Send email notification for workflow started
+  try {
+    const emailService = getEmailService();
+    if (emailService.isConfigured()) {
+      const recipients = await db.getEmailRecipientsForUser(options.userId, 'workflow_started', options.projectId);
+      if (recipients.length > 0) {
+        const emailHtml = emailTemplates.workflowStartedTemplate({
+          workflowId,
+          name: workflowConfig.name,
+          description: workflowConfig.description,
+          totalSteps: workflowConfig.agents.length,
+          budgetLimit: workflowConfig.workflow.budget?.daily_max_cost
+            ? parseCost(workflowConfig.workflow.budget.daily_max_cost)
+            : undefined,
+        });
+        await emailService.queueEmail({
+          to: recipients,
+          subject: `Workflow Started: ${workflowConfig.name}`,
+          html: emailHtml,
+        });
+      }
+    }
+  } catch (error) {
+    console.error('[Workflow] Failed to send workflow started email:', error);
   }
 
   // Start workflow execution asynchronously
@@ -263,6 +292,29 @@ async function executeWorkflowAsync(
             console.error('[Workflow] Failed to send budget exceeded notification:', notificationError);
           }
 
+          // Send budget exceeded email
+          try {
+            const emailService = getEmailService();
+            if (emailService.isConfigured()) {
+              const recipients = await db.getEmailRecipientsForUser(workflow.userId, 'budget_exceeded', workflow.projectId);
+              if (recipients.length > 0) {
+                const emailHtml = emailTemplates.budgetExceededTemplate({
+                  currentCost: totalCost,
+                  budgetLimit: workflow.budgetLimit,
+                  workflowId,
+                  workflowName: workflow.name,
+                });
+                await emailService.queueEmail({
+                  to: recipients,
+                  subject: `Budget Exceeded: ${workflow.name}`,
+                  html: emailHtml,
+                });
+              }
+            }
+          } catch (notificationError) {
+            console.error('[Workflow] Failed to send budget exceeded email:', notificationError);
+          }
+
           throw new Error(`Budget limit exceeded: ${formatCost(totalCost)} >= ${formatCost(workflow.budgetLimit)}`);
         }
       }
@@ -331,6 +383,36 @@ async function executeWorkflowAsync(
       metadata: { duration, totalCost: formatCost(totalCost), iterations },
     });
 
+    // Record metrics for analytics
+    const workflow = await db.getWorkflowById(workflowId);
+    if (workflow) {
+      const today = new Date().toISOString().split('T')[0];
+      await metricsService.recordMetric(
+        workflow.userId,
+        'workflow_duration',
+        duration,
+        { status: 'completed', projectId: workflow.projectId },
+        undefined,
+        workflowId
+      );
+      await metricsService.recordMetric(
+        workflow.userId,
+        'workflow_cost',
+        totalCost,
+        { status: 'completed', projectId: workflow.projectId },
+        undefined,
+        workflowId
+      );
+
+      // Update daily metrics summary
+      await metricsService.updateDailyMetricsSummary(workflow.userId, today, {
+        totalWorkflows: 1,
+        successCount: 1,
+        totalDuration: duration,
+        totalCost,
+      });
+    }
+
     // Emit workflow completed event
     workflowEmitter.emit(workflowId, 'workflow:completed', {
       duration,
@@ -339,12 +421,12 @@ async function executeWorkflowAsync(
       currentStep: stepNumber,
     });
 
-    // Send Slack notification for workflow completed
-    try {
-      const slackClient = getSlackClient();
-      if (slackClient.isConfigured()) {
-        const workflow = await db.getWorkflowById(workflowId);
-        if (workflow) {
+    // Update budget tracking and send notifications
+    if (workflow) {
+      // Send Slack notification for workflow completed
+      try {
+        const slackClient = getSlackClient();
+        if (slackClient.isConfigured()) {
           const notification = formatter.formatWorkflowCompleted({
             workflowId,
             name: workflow.name,
@@ -359,14 +441,36 @@ async function executeWorkflowAsync(
             notification.blocks
           );
         }
+      } catch (error) {
+        console.error('[Workflow] Failed to send workflow completed notification:', error);
       }
-    } catch (error) {
-      console.error('[Workflow] Failed to send workflow completed notification:', error);
-    }
 
-    // Update budget tracking
-    const workflow = await db.getWorkflowById(workflowId);
-    if (workflow) {
+      // Send email notification for workflow completed
+      try {
+        const emailService = getEmailService();
+        if (emailService.isConfigured()) {
+          const recipients = await db.getEmailRecipientsForUser(workflow.userId, 'workflow_completed', workflow.projectId);
+          if (recipients.length > 0) {
+            const emailHtml = emailTemplates.workflowCompletedTemplate({
+              workflowId,
+              name: workflow.name,
+              duration,
+              totalCost,
+              iterations,
+              currentStep: workflow.currentStep || undefined,
+            });
+            await emailService.queueEmail({
+              to: recipients,
+              subject: `Workflow Completed: ${workflow.name}`,
+              html: emailHtml,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[Workflow] Failed to send workflow completed email:', error);
+      }
+
+      // Update budget tracking
       const today = new Date().toISOString().split('T')[0];
       await db.updateBudgetTracking(workflow.userId, today, totalCost, false, true);
     }
@@ -391,8 +495,37 @@ async function executeWorkflowAsync(
       metadata: { error: error instanceof Error ? error.message : String(error), duration },
     });
 
-    // Emit workflow failed event
+    // Record metrics for analytics
     const workflow = await db.getWorkflowById(workflowId);
+    if (workflow) {
+      const today = new Date().toISOString().split('T')[0];
+      await metricsService.recordMetric(
+        workflow.userId,
+        'workflow_duration',
+        duration,
+        { status: 'failed', projectId: workflow.projectId },
+        undefined,
+        workflowId
+      );
+      await metricsService.recordMetric(
+        workflow.userId,
+        'workflow_cost',
+        totalCost,
+        { status: 'failed', projectId: workflow.projectId },
+        undefined,
+        workflowId
+      );
+
+      // Update daily metrics summary
+      await metricsService.updateDailyMetricsSummary(workflow.userId, today, {
+        totalWorkflows: 1,
+        failureCount: 1,
+        totalDuration: duration,
+        totalCost,
+      });
+    }
+
+    // Emit workflow failed event
     workflowEmitter.emit(workflowId, 'workflow:failed', {
       error: error instanceof Error ? error.message : String(error),
       duration,
@@ -425,6 +558,35 @@ async function executeWorkflowAsync(
       }
     } catch (notificationError) {
       console.error('[Workflow] Failed to send workflow failed notification:', notificationError);
+    }
+
+    // Send email notification for workflow failed
+    try {
+      const emailService = getEmailService();
+      if (emailService.isConfigured()) {
+        const workflow = await db.getWorkflowById(workflowId);
+        if (workflow) {
+          const recipients = await db.getEmailRecipientsForUser(workflow.userId, 'workflow_failed', workflow.projectId);
+          if (recipients.length > 0) {
+            const emailHtml = emailTemplates.workflowFailedTemplate({
+              workflowId,
+              name: workflow.name,
+              error: error instanceof Error ? error.message : String(error),
+              duration,
+              totalCost,
+              currentAgent: workflow.currentAgent || undefined,
+              currentStep: workflow.currentStep || undefined,
+            });
+            await emailService.queueEmail({
+              to: recipients,
+              subject: `Workflow Failed: ${workflow.name}`,
+              html: emailHtml,
+            });
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('[Workflow] Failed to send workflow failed email:', notificationError);
     }
   }
 }

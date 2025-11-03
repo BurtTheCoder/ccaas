@@ -29,6 +29,9 @@ export function registerWebhookRoutes(app: any) {
   const createGenericHandler = (configService: ConfigService, actionService: ActionService) =>
     (req: any, res: any) => webhookHandlers.handleGenericWebhook(req, res, configService, actionService);
 
+  const createLinearHandler = (configService: ConfigService, actionService: ActionService) =>
+    (req: any, res: any) => webhookHandlers.handleLinearWebhook(req, res, configService, actionService);
+
   /**
    * Slack webhook endpoint
    * POST /webhook/slack
@@ -62,6 +65,18 @@ export function registerWebhookRoutes(app: any) {
     webhookAuth.verifyApiKey,
     webhookAuth.requirePermissions('execute'),
     createGenericHandler(configService, actionService)
+  );
+
+  /**
+   * Linear webhook endpoint
+   * POST /webhook/linear
+   */
+  router.post(
+    '/linear',
+    webhookAuth.verifyApiKey,
+    webhookAuth.requirePermissions('execute'),
+    // Note: In production, signature verification is handled inside the handler
+    createLinearHandler(configService, actionService)
   );
 
   app.use('/api/webhooks', router);

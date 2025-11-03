@@ -1,0 +1,133 @@
+name: "Code Review & QA"
+description: "Multi-agent code review with automated testing, security scanning, and quality checks"
+version: "1.0.0"
+
+agents:
+  - name: "code-analyzer"
+    role: "Analyze the codebase for quality, security, and best practices violations"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Grep", "Glob", "Bash"]
+      skills: []
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Analyze the codebase in {{targetDirectory}} for:
+      1. Code quality issues (complexity, duplication, maintainability)
+      2. Security vulnerabilities and potential risks
+      3. Best practice violations
+      4. Performance concerns
+      5. Test coverage gaps
+
+      Focus on: {{focusAreas}}
+
+      Provide a detailed report with specific file locations and recommendations.
+    output: "analysis_report"
+    next: "security-scanner"
+
+  - name: "security-scanner"
+    role: "Perform security audit and vulnerability scanning"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Grep", "Glob", "Bash"]
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Based on the analysis report: {{analysis_report}}
+
+      Perform a security audit focusing on:
+      1. Dependencies with known vulnerabilities
+      2. Hardcoded secrets or credentials
+      3. Insecure configurations
+      4. Authentication/authorization issues
+      5. Input validation gaps
+
+      Scan: {{scanPaths}}
+    output: "security_report"
+    next: "test-validator"
+
+  - name: "test-validator"
+    role: "Validate tests and coverage, run test suite"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Grep", "Glob", "Bash"]
+      resources:
+        memory: "4g"
+        timeout: "15m"
+    prompt: |
+      Review the test suite:
+      1. Run existing tests and report results
+      2. Analyze test coverage
+      3. Identify untested critical paths
+      4. Check for flaky or slow tests
+      5. Validate test quality and assertions
+
+      Test command: {{testCommand}}
+      Minimum coverage: {{minCoverage}}%
+    output: "test_report"
+    next: "reviewer"
+
+  - name: "reviewer"
+    role: "Synthesize findings and create comprehensive code review"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Write", "Bash"]
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Create a comprehensive code review report based on:
+      - Code Analysis: {{analysis_report}}
+      - Security Audit: {{security_report}}
+      - Test Validation: {{test_report}}
+
+      Generate:
+      1. Executive summary with overall assessment
+      2. Critical issues requiring immediate attention
+      3. Recommended improvements with priority
+      4. Action items with estimated effort
+      5. Approval recommendation (approve/request changes/reject)
+
+      Save report to: {{outputFile}}
+
+workflow:
+  trigger:
+    type: "manual"
+  max_iterations: 1
+  max_consecutive_failures: 2
+  max_runtime: "45m"
+  budget:
+    max_cost_per_execution: "$5.00"
+    pause_on_exceed: true
+  notifications:
+    on_completion:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+    on_failure:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+  safety:
+    validation:
+      require_tests: true
+      require_passing_tests: false
+  context:
+    repository: "owner/repo"
+    targetDirectory: "."
+    focusAreas: "security, performance, maintainability"
+    scanPaths: "src, server, client"
+    testCommand: "npm test"
+    minCoverage: "80"
+    outputFile: "code-review-report.md"
+    slackChannel: "#code-reviews"

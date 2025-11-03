@@ -1,0 +1,156 @@
+name: "Bug Investigation & Fix"
+description: "Systematic bug investigation, root cause analysis, and automated fix with testing"
+version: "1.0.0"
+
+agents:
+  - name: "bug-investigator"
+    role: "Investigate the bug, reproduce it, and identify root cause"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Grep", "Glob", "Bash"]
+      skills: ["superpowers:systematic-debugging", "superpowers:root-cause-tracing"]
+      resources:
+        memory: "4g"
+        timeout: "20m"
+    prompt: |
+      Bug Report:
+      Title: {{bugTitle}}
+      Description: {{bugDescription}}
+      Steps to Reproduce: {{stepsToReproduce}}
+      Expected: {{expectedBehavior}}
+      Actual: {{actualBehavior}}
+
+      Tasks:
+      1. Locate relevant code files
+      2. Reproduce the bug if possible
+      3. Trace execution flow
+      4. Identify root cause
+      5. Document findings
+
+      Use systematic debugging approach and root cause tracing skills.
+    output: "investigation_report"
+    next: "fix-implementer"
+
+  - name: "fix-implementer"
+    role: "Implement the bug fix based on investigation findings"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Edit", "Write", "Bash"]
+      skills: ["superpowers:test-driven-development"]
+      resources:
+        memory: "4g"
+        timeout: "30m"
+    prompt: |
+      Based on investigation: {{investigation_report}}
+
+      Implement the fix:
+      1. Write failing test that reproduces the bug (TDD)
+      2. Implement minimal fix to make test pass
+      3. Ensure no regressions in existing tests
+      4. Add edge case tests
+      5. Update documentation if needed
+
+      Coding standards: {{codingStandards}}
+      Test framework: {{testFramework}}
+    output: "fix_implementation"
+    next: "fix-validator"
+
+  - name: "fix-validator"
+    role: "Validate the fix works and doesn't introduce regressions"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Bash"]
+      skills: ["superpowers:verification-before-completion"]
+      resources:
+        memory: "4g"
+        timeout: "20m"
+    prompt: |
+      Validate the fix:
+      1. Run full test suite
+      2. Verify the bug is resolved
+      3. Check for regressions
+      4. Test edge cases
+      5. Validate code quality
+
+      Test command: {{testCommand}}
+      Build command: {{buildCommand}}
+
+      Report: PASS/FAIL with evidence
+    output: "validation_report"
+    conditions:
+      - if: "validation_report contains PASS"
+        then: "success"
+        next: "pr-creator"
+      - if: "validation_report contains FAIL"
+        then: "retry"
+        next: "fix-implementer"
+
+  - name: "pr-creator"
+    role: "Create pull request with the bug fix"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash"]
+      resources:
+        memory: "2g"
+        timeout: "10m"
+    prompt: |
+      Create a pull request:
+
+      Investigation: {{investigation_report}}
+      Fix: {{fix_implementation}}
+      Validation: {{validation_report}}
+
+      PR Details:
+      - Title: "Fix: {{bugTitle}}"
+      - Branch: "fix/{{branchName}}"
+      - Description: Include root cause, fix explanation, test evidence
+      - Link to issue: {{issueUrl}}
+
+      Use: gh pr create
+
+workflow:
+  trigger:
+    type: "webhook"
+    endpoint: "/webhooks/bug-fix"
+  max_iterations: 2
+  max_consecutive_failures: 1
+  max_runtime: "90m"
+  budget:
+    max_cost_per_execution: "$10.00"
+    pause_on_exceed: true
+  notifications:
+    on_completion:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+      github:
+        enabled: true
+        comment_on_issue: true
+  safety:
+    require_human_approval_for:
+      - creating_pull_request
+    validation:
+      require_tests: true
+      require_passing_tests: true
+  context:
+    repository: "owner/repo"
+    bugTitle: "Bug title from issue"
+    bugDescription: "Detailed bug description"
+    stepsToReproduce: "1. Do this 2. Do that"
+    expectedBehavior: "What should happen"
+    actualBehavior: "What actually happens"
+    issueUrl: "https://github.com/owner/repo/issues/123"
+    branchName: "issue-123"
+    codingStandards: "ESLint, Prettier"
+    testFramework: "vitest"
+    testCommand: "npm test"
+    buildCommand: "npm run build"
+    slackChannel: "#bug-fixes"

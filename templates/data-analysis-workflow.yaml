@@ -1,0 +1,210 @@
+name: "Data Processing & Analysis"
+description: "Automated data collection, processing, analysis, and reporting"
+version: "1.0.0"
+
+agents:
+  - name: "data-collector"
+    role: "Collect and validate data from various sources"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash", "Read", "Write"]
+      resources:
+        memory: "4g"
+        timeout: "30m"
+    prompt: |
+      Collect data from sources:
+      1. {{dataSource1}}
+      2. {{dataSource2}}
+      3. {{dataSource3}}
+
+      Collection parameters:
+      - Date range: {{dateRange}}
+      - Filters: {{dataFilters}}
+      - Format: {{dataFormat}}
+
+      Validation:
+      - Check completeness
+      - Verify data types
+      - Remove duplicates
+      - Handle missing values
+
+      Save to: {{rawDataFile}}
+    output: "collection_report"
+    next: "data-processor"
+
+  - name: "data-processor"
+    role: "Clean, transform, and process collected data"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash", "Read", "Write"]
+      resources:
+        memory: "8g"
+        timeout: "45m"
+    prompt: |
+      Process data from: {{collection_report}}
+
+      Processing steps:
+      1. Clean data (remove outliers, fix formats)
+      2. Transform: {{transformations}}
+      3. Aggregate: {{aggregations}}
+      4. Enrich with: {{enrichmentSources}}
+      5. Normalize and standardize
+
+      Output format: {{outputFormat}}
+      Save to: {{processedDataFile}}
+
+      Handle errors gracefully and log issues.
+    output: "processing_report"
+    next: "data-analyzer"
+
+  - name: "data-analyzer"
+    role: "Perform statistical analysis and generate insights"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash", "Read", "Write"]
+      resources:
+        memory: "8g"
+        timeout: "60m"
+    prompt: |
+      Analyze processed data: {{processing_report}}
+
+      Analysis tasks:
+      1. Calculate metrics: {{metricsToCalculate}}
+      2. Identify trends and patterns
+      3. Perform statistical tests
+      4. Generate comparisons: {{comparisonPeriods}}
+      5. Detect anomalies
+
+      Analysis type: {{analysisType}}
+      Confidence level: {{confidenceLevel}}
+
+      Output detailed analysis with:
+      - Key findings
+      - Statistical significance
+      - Visualizations (if applicable)
+      - Recommendations
+
+      Save to: {{analysisFile}}
+    output: "analysis_report"
+    next: "report-generator"
+
+  - name: "report-generator"
+    role: "Generate comprehensive report with visualizations"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Read", "Write", "Bash"]
+      resources:
+        memory: "4g"
+        timeout: "30m"
+    prompt: |
+      Generate report based on:
+      - Collection: {{collection_report}}
+      - Processing: {{processing_report}}
+      - Analysis: {{analysis_report}}
+
+      Report sections:
+      1. Executive Summary
+      2. Data Overview
+      3. Key Metrics
+      4. Trends and Insights
+      5. Recommendations
+      6. Appendix (methodology, raw data)
+
+      Report format: {{reportFormat}}
+      Include charts: {{includeCharts}}
+      Visualization types: {{chartTypes}}
+
+      Save to: {{reportFile}}
+
+      Ensure report is clear, actionable, and well-formatted.
+    output: "final_report"
+    next: "report-publisher"
+
+  - name: "report-publisher"
+    role: "Publish report and distribute to stakeholders"
+    container:
+      image: "node:22-bullseye"
+      githubRepo: "{{repository}}"
+      workingDir: "/workspace"
+      tools: ["Bash", "Write"]
+      resources:
+        memory: "2g"
+        timeout: "15m"
+    prompt: |
+      Publish report:
+
+      Report: {{final_report}}
+
+      Distribution:
+      1. Upload to: {{reportDestination}}
+      2. Send via email to: {{recipients}}
+      3. Post to Slack: {{slackChannel}}
+      4. Archive in: {{archiveLocation}}
+
+      Include:
+      - Report file
+      - Raw data (if requested): {{includeRawData}}
+      - Summary dashboard link
+
+      Notification preferences: {{notificationPreferences}}
+
+workflow:
+  trigger:
+    type: "cron"
+    schedule: "0 6 * * 1"
+  max_iterations: 1
+  max_consecutive_failures: 1
+  max_runtime: "180m"
+  budget:
+    max_cost_per_execution: "$20.00"
+    pause_on_exceed: true
+  notifications:
+    on_completion:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+      email:
+        enabled: true
+        recipients: ["{{notificationEmail}}"]
+    on_failure:
+      slack:
+        enabled: true
+        channel: "{{slackChannel}}"
+  context:
+    repository: "owner/repo"
+    dataSource1: "API endpoint"
+    dataSource2: "Database query"
+    dataSource3: "CSV export"
+    dateRange: "last 7 days"
+    dataFilters: "status=active,region=US"
+    dataFormat: "JSON"
+    rawDataFile: "data/raw/weekly-data.json"
+    transformations: "normalize, aggregate by day"
+    aggregations: "sum, average, count"
+    enrichmentSources: "user metadata, location data"
+    outputFormat: "CSV"
+    processedDataFile: "data/processed/weekly-data.csv"
+    metricsToCalculate: "conversion rate, retention, churn"
+    comparisonPeriods: "previous week, same week last year"
+    analysisType: "comparative"
+    confidenceLevel: "95%"
+    analysisFile: "analysis/weekly-analysis.md"
+    reportFormat: "PDF"
+    includeCharts: "true"
+    chartTypes: "line, bar, pie"
+    reportFile: "reports/weekly-report.pdf"
+    reportDestination: "s3://reports-bucket"
+    recipients: "stakeholders@example.com"
+    includeRawData: "false"
+    archiveLocation: "s3://archives/reports"
+    notificationPreferences: "immediate"
+    slackChannel: "#data-reports"
+    notificationEmail: "data-team@example.com"
